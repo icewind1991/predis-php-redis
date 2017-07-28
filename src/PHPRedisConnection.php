@@ -8,6 +8,7 @@ use Predis\Connection\AbstractConnection;
 use Predis\Connection\Parameters;
 use Predis\Connection\ParametersInterface;
 use Predis\Response\Error;
+use Predis\Response\ServerException;
 use Predis\Response\Status;
 
 class PHPRedisConnection extends AbstractConnection {
@@ -74,7 +75,11 @@ class PHPRedisConnection extends AbstractConnection {
 			$type = $this->redis->type($command->getArgument(0));
 			$this->currentResponses[] = self::TYPEMAP[$type];
 		} else {
-			$this->currentResponses[] = call_user_func_array([$this->redis, 'rawCommand'], array_merge([$command->getId()], $command->getArguments()));
+			try {
+				$this->currentResponses[] = call_user_func_array([$this->redis, 'rawCommand'], array_merge([$command->getId()], $command->getArguments()));
+			} catch (\RedisException $e) {
+				throw new ServerException($e->getMessage(), $e->getCode(), $e);
+			}
 		}
 	}
 

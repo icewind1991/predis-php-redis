@@ -1,13 +1,30 @@
 {
+  "name": "icewind/predis-php-redis",
+  "type": "library",
+  "description": "Compatibility layer between predis and php-redis"
+  "keywords": ["redis", "predis"],
+  "homepage": "https://github.com/icewind1991/predis-php-redis",
+  "license": "MIT",
+  "support": {
+    "issues": "https://github.com/icewind1991/predis-php-redis/issues"
+  },
+  "authors": [
+    {
+      "name": "Robin Appelman",
+      "email": "robin@icewind.nl",
+      "homepage": "http://icewind.nl"
+    }
+  ],
   "require": {
+    "php": ">=5.4.0",
     "predis/predis": "^1.1",
+  },
+  "require-dev": {
     "phpunit/phpunit": "5"
   },
   "autoload": {
     "psr-4": {
       "PredisPHPRedis\\": "src/"
     }
-  },
-  "require-dev": {
   }
 }

@@ -4,7 +4,7 @@ services: redis-server
 install:
   - yes '' | pecl install redis
 before_script:
-  - composer install --no-interaction --prefer-source --dev
+  - composer install --no-interaction --prefer-source
 script:
   - vendor/bin/phpunit -c phpunit.xml.travisci
 matrix:

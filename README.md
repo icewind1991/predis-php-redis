@@ -1,5 +1,7 @@
 # predis-php-redis
 
+[![Build Status](https://travis-ci.org/icewind1991/predis-php-redis.svg?branch=master)](https://travis-ci.org/icewind1991/predis-php-redis)
+
 Compatibility layer between [`predis`](https://github.com/nrk/predis) and [`php-redis`](https://github.com/phpredis/phpredis)
 
 ## Usage

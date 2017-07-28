@@ -9,8 +9,8 @@
  * file that was distributed with this source code.
  */
 
-if (file_exists(__DIR__.'/../autoload.php')) {
-    require __DIR__.'/../autoload.php';
+if (file_exists(__DIR__.'/../vendor/autoload.php')) {
+    require __DIR__.'/../vendor/autoload.php';
 } elseif (@include('Predis/Autoloader.php')) {
     Predis\Autoloader::register();
 } else {

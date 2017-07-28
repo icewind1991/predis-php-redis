@@ -1,23 +1,4 @@
 <?php
-/**
- * @copyright Copyright (c) 2017 Robin Appelman <robin@icewind.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
 
 namespace PredisPHPRedis;
 
@@ -26,12 +7,33 @@ use Predis\Command\CommandInterface;
 use Predis\Connection\AbstractConnection;
 use Predis\Connection\Parameters;
 use Predis\Connection\ParametersInterface;
+use Predis\Response\Error;
+use Predis\Response\Status;
 
 class PHPRedisConnection extends AbstractConnection {
 	/** @var \Redis|\RedisCluster */
 	private $redis;
 
-	private $currentResponse;
+	/**
+	 * @var array
+	 */
+	private $currentResponses;
+
+	/** @var CommandInterface */
+	private $lastCommand;
+
+	private $inQueue = false;
+
+	private $queuedCommands = [];
+
+	const TYPEMAP = [
+		\Redis::REDIS_STRING => 'string',
+		\Redis::REDIS_LIST => 'list',
+		\Redis::REDIS_SET => 'set',
+		\Redis::REDIS_ZSET => 'zset',
+		\Redis::REDIS_HASH => 'hash',
+		\Redis::REDIS_NOT_FOUND => 'none',
+	];
 
 	public function __construct($redis) {
 		parent::__construct(new Parameters());
@@ -45,26 +47,116 @@ class PHPRedisConnection extends AbstractConnection {
 	}
 
 	public function writeRequest(CommandInterface $command) {
-		$this->currentResponse = call_user_func_array([$this->redis, 'rawCommand'], array_merge([$command->getId()], $command->getArguments()));
+		$this->lastCommand = $command;
+
+		if ($command->getId() === 'PEXPIREAT' || $command->getId() === 'MOVE') {
+			$command->setArguments([$command->getArgument(0), (int)$command->getArgument(1)]);
+		}
+
+
+		if ($command->getId() === 'EXEC') {
+			$this->inQueue = false;
+		}
+		if ($command->getId() === 'DISCARD') {
+			$this->inQueue = false;
+			$this->queuedCommands = [];
+		}
+
+		if ($this->inQueue) {
+			$this->queuedCommands[] = $command;
+		}
+
+		if ($command->getId() === 'MULTI') {
+			$this->inQueue = true;
+		}
+
+		if ($command->getId() === 'TYPE') {
+			$type = $this->redis->type($command->getArgument(0));
+			$this->currentResponses[] = self::TYPEMAP[$type];
+		} else {
+			$this->currentResponses[] = call_user_func_array([$this->redis, 'rawCommand'], array_merge([$command->getId()], $command->getArguments()));
+		}
 	}
 
 	public function read() {
-		return $this->currentResponse;
+		$response = array_shift($this->currentResponses);
+		return $this->handleResponse($response, $this->lastCommand, $this->queuedCommands);
+	}
+
+	private function handleResponse($response, CommandInterface $command, array $subCommands = []) {
+		if (strpos($command->getId(), 'FLOAT') !== false || strpos($command->getId(), 'GETALL') !== false) {
+			$response = $this->round($response);
+		}
+		if ($response === true) {
+			return $this->translateTrue($command);
+		} else if ($response === false) {
+			$error = $this->getLastError();
+			if ($error) {
+				return new Error($this->getLastError());
+			}
+		} else if (is_array($response)) {
+			if ($command->getId() === 'EXEC' && count($response) === 0 && count($subCommands) > 0) {
+				return null;
+			}
+			return $this->translateArray($response, $command, $subCommands);
+		} else {
+			if ($command->getId() === 'EXEC') {
+				$this->queuedCommands = [];
+			}
+			return $response;
+		}
+	}
+
+	private function round($value) {
+		if (is_numeric($value) && is_string($value)) {
+			return '' . round($value, 17);
+		} else {
+			return $value;
+		}
+	}
+
+	private function translateArray(array $response, CommandInterface $command, array $subCommands = []) {
+		return array_map(function ($item) use ($command, &$subCommands) {
+			if (is_string($item) && $command->getId() === 'INFO') {
+				return Status::get($item);
+			}
+
+			$activeCommand = count($subCommands) ? array_shift($subCommands) : $command;
+			$activeSubCommands = count($subCommands) ? [] : $subCommands;
+
+			return $this->handleResponse($item, $activeCommand, $activeSubCommands);
+		}, $response);
+	}
+
+	private function translateTrue(CommandInterface $command) {
+		if ($this->inQueue && $command->getId() !== 'MULTI') {
+			return Status::get('QUEUED');
+		}
+
+		switch ($command->getId()) {
+			case 'PING':
+				return Status::get('PONG');
+			case 'MIGRATE':
+				return Status::get('NOKEY');
+			case 'EXISTS':
+				return 1;
+			default:
+				return Status::get('OK');
+		}
 	}
 
 	/**
-	 * Wrap a php-redis instance in a predis instance
+	 * Get the last error and do some translation
 	 *
-	 * @param \Redis|\RedisCluster $redis
-	 * @return Client
+	 * @return string
 	 */
-	public static function wrap($redis): Client {
-		return new Client('tcp://127.0.0.1', [
-			'connections' => [
-				'tcp' => function () use ($redis) {
-					return new \PredisPHPRedis\PHPRedisConnection($redis);
-				},
-			]
-		]);
+	private function getLastError() {
+		$sourceError = $this->redis->getLastError();
+		switch ($sourceError) {
+			case 'ERR DB index is out of range':
+				return 'ERR invalid DB index';
+			default:
+				return $sourceError;
+		}
 	}
 }

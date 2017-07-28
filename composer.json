@@ -1,10 +1,13 @@
 {
   "require": {
-    "predis/predis": "^1.1"
+    "predis/predis": "^1.1",
+    "phpunit/phpunit": "5"
   },
   "autoload": {
     "psr-4": {
       "PredisPHPRedis\\": "src/"
     }
+  },
+  "require-dev": {
   }
 }

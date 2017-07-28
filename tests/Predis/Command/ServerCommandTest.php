@@ -93,25 +93,6 @@ class ServerCommandTest extends PredisCommandTestCase
         $this->assertCount(1, $response = $redis->command('INFO', 'FOOBAR'));
         $this->assertSame(array(null), $response);
     }
-
-    /**
-     * @group connected
-     * @requiresRedisVersion >= 2.8.13
-     */
-    public function testReturnsCommandInfoOnExistingCommand()
-    {
-        $redis = $this->getClient();
-
-        // NOTE: we use assertEquals instead of assertSame because Redis returns
-        // flags as +STATUS responses, represented by Predis with instances of
-        // Predis\Response\Status instead of plain strings. This class responds
-        // to __toString() so the string conversion is implicit, but assertSame
-        // checks for strict equality while assertEquals is loose.
-        $expected = array(array('get', 2, array('readonly', 'fast'), 1, 1, 1));
-        $this->assertCount(1, $response = $redis->command('INFO', 'GET'));
-        $this->assertEquals($expected, $response);
-    }
-
     /**
      * @group connected
      * @requiresRedisVersion >= 2.8.13

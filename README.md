@@ -11,6 +11,10 @@ $redis->connect('127.0.0.1', 6379);
 
 // create a predis instance using the existing php-redis instance
 $predis = \PredisPHPRedis\Wrapper::wrap($redis);
+
+// use predis as normal
+
+$predis->set('foo', 'bar');
 ```
 
 ## Why
